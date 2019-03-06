@@ -49,22 +49,40 @@ void updateWatch() {
      day(tt), monthNames[month(tt)-1], year(tt)-2000);
   oled.drawStr(0,60,tmp);
   oled.sendBuffer();
-  int state=digitalRead(LED_BUILTIN);
-  digitalWrite(LED_BUILTIN, !state);
+  // Blink builtin LED once per second except during night hours
+  if (hour(tt)>=7 and hour(tt)<=23) {
+    int state=digitalRead(LED_BUILTIN);
+    digitalWrite(LED_BUILTIN, !state);
+  } else {digitalWrite(LED_BUILTIN, HIGH);}
 }
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(D3,OUTPUT);
   Serial.begin(115200);
+  oled.begin();
+//  oled.setFont(u8x8_font_chroma48medium8_r);
+  oled.setFont(u8g2_font_logisoso16_tf);
+  oled.clearBuffer();
+  oled.drawStr(10,28,"Connecting");
+  oled.drawStr(10,48,"to WiFi...");
+  oled.sendBuffer();
   WiFiManager wifiManager;
   wifiManager.autoConnect();
-  oled.begin();
-  oled.setFont(u8x8_font_chroma48medium8_r);
-  Serial.println("connected...");
+  oled.clearBuffer();
+  oled.drawStr(10,28,"Connected!");
+  oled.drawStr(10,48,"Starting NTP");
+  oled.sendBuffer();
   timeClient.begin();
+  oled.clearBuffer();
+  oled.drawStr(10,28,"NTP started!");
+  oled.drawStr(10,48,"updating time");
+  oled.sendBuffer();
   timeClient.update();
+  oled.clearBuffer();
+  oled.drawStr(30,40,"Ready!");
+  oled.sendBuffer();
   eachSec.attach(1,updateWatch);
-  pinMode(D3,OUTPUT);
 }
 
 void loop() {

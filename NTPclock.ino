@@ -24,7 +24,7 @@
 #include <Time.h>
 
 const int offsetFromGMT=-10800; // GMT-3
-const int updInterval=60000; // NTP update interval in ms
+const int updInterval=600000; // NTP update interval in ms
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", offsetFromGMT, updInterval);
 Ticker eachSec;
@@ -35,19 +35,17 @@ const char* monthNames[12]={"Ene","Feb","Mar","Abr","May","Jun",
 
 void updateWatch() {
   char tmp[16];
-  unsigned long epoch=timeClient.getEpochTime();
-  setTime(epoch);
-  int tt=now();
+  unsigned long tt=timeClient.getEpochTime();
   oled.clearBuffer();
   oled.setFont(u8g2_font_logisoso32_tf);
   sprintf(tmp,"%02d:%02d",hour(tt),minute(tt));
-  oled.drawStr(5,35,tmp);
+  oled.drawStr(5,32,tmp);
   oled.setFont(u8g2_font_logisoso16_tf);
   sprintf(tmp,"%02d",second(tt));
-  oled.drawStr(100,27,tmp);
+  oled.drawStr(100,24,tmp);
   sprintf(tmp,"%3s %02d-%3s-%02d", weekDays[weekday(tt)-1], 
      day(tt), monthNames[month(tt)-1], year(tt)-2000);
-  oled.drawStr(0,60,tmp);
+  oled.drawStr(0,55,tmp);
   oled.sendBuffer();
   // Blink builtin LED once per second except during night hours
   if (hour(tt)>=7 and hour(tt)<=23) {
@@ -60,6 +58,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(D3,OUTPUT);
   Serial.begin(115200);
+  timeClient.begin();
   oled.begin();
 //  oled.setFont(u8x8_font_chroma48medium8_r);
   oled.setFont(u8g2_font_logisoso16_tf);
@@ -73,17 +72,18 @@ void setup() {
   oled.drawStr(10,28,"Connected!");
   oled.drawStr(10,48,"Starting NTP");
   oled.sendBuffer();
-  timeClient.begin();
   oled.clearBuffer();
   oled.drawStr(10,28,"NTP started!");
   oled.drawStr(10,48,"updating time");
   oled.sendBuffer();
-  timeClient.update();
+  while (!timeClient.forceUpdate()) { delay(1000); }
   oled.clearBuffer();
   oled.drawStr(30,40,"Ready!");
   oled.sendBuffer();
-  eachSec.attach(1,updateWatch);
+  eachSec.attach(1,updateWatch); //re-paint OLED every second
 }
 
 void loop() {
+  if (!timeClient.update()) { Serial.println("NTP update failed!"); }
+  delay(10000);
 }

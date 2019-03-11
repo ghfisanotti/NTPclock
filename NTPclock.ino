@@ -29,7 +29,7 @@ const int offsetFromGMT=-10800; // GMT-3
 const int updInterval=600000; // NTP update interval in ms
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", offsetFromGMT, updInterval);
-Ticker clockTimer, weatherTimer;
+Ticker clockTimer, weatherTimer, blinkTimer, faceTimer;
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C oled(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 const char* weekDays[7]={"Dom","Lun","Mar","Mie","Jue","Vie","Sab"};
 const char* monthNames[12]={"Ene","Feb","Mar","Abr","May","Jun",
@@ -42,7 +42,7 @@ int weather_humidity=0; //Ambient relative humidity
 unsigned long weather_dt=0; //Time of last weather update
 String weather_desc=""; //Weather conditions description
 int weather_id=0; //Weather conditions ID
-bool getWeatherNow=false;
+bool getWeatherNow=false, showAnalog=true;; 
 
 void getWeather() {
   DynamicJsonBuffer jsonBuffer;
@@ -71,6 +71,54 @@ void getWeather() {
   getWeatherNow=false;
 }
 
+void blinkLED() {
+  // Blink builtin LED once per second except during night hours
+  unsigned long tt=timeClient.getEpochTime();
+  if (hour(tt)>=7 and hour(tt)<=23) {
+    int state=digitalRead(LED_BUILTIN);
+    digitalWrite(LED_BUILTIN, !state);
+  } else {digitalWrite(LED_BUILTIN, HIGH);}
+}
+
+void analogClock() {
+  char tmp[16];
+  unsigned int xc=31, yc=31, x0, y0, x1, y1;
+  unsigned long tt=timeClient.getEpochTime();
+  oled.clearBuffer();
+  oled.setFont(u8g2_font_8x13B_mf);
+  oled.drawCircle(xc,yc,31);
+  oled.drawCircle(xc,yc,30);
+  for (float ang=30.0; ang <=330; ang=ang+30.0) {
+    x0=round(sin(ang*71.0/4068.0) * 29 + xc);
+    y0=round(-cos(ang*71.0/4068.0) * 29 + xc);
+    oled.drawDisc(x0, y0, 1);
+  }
+  oled.drawDisc(xc,5,2);
+  int hh=hour(tt);
+  int mm=minute(tt);
+  int ss=second(tt);
+  if (hh>=12) {hh=hh-12;}
+  float hang=(hh*30.0)+(mm/2.0);
+  float mang=mm*6.0;
+  float sang=ss*6.0;
+  x1=round(sin(hang*71/4068.0) * 18 + xc);
+  y1=round(-cos(hang*71/4068.0) * 18 + yc);
+  oled.drawLine(xc,yc,x1,y1);
+  x1=round(sin(mang*71/4068.0) * 27 + xc);
+  y1=round(-cos(mang*71/4068.0) * 27 + yc);
+  oled.drawLine(xc,yc,x1,y1);
+  oled.setFont(u8g2_font_8x13B_mf);
+  sprintf(tmp,"%3s %02d", weekDays[weekday(tt)-1], day(tt));
+  oled.drawStr(70,10,tmp);
+  sprintf(tmp,"%02dC %02d%%", round(weather_temp), weather_humidity);
+  oled.drawStr(70,28,tmp);
+  sprintf(tmp,"%04dhPa", weather_pressure);
+  oled.drawStr(70,43,tmp);
+  sprintf(tmp,"%02d:%02d:%02d", hour(tt),mm,ss);
+  oled.drawStr(64,64,tmp);
+  oled.sendBuffer();
+}
+
 void digitalClock() {
   char tmp[16];
   unsigned long tt=timeClient.getEpochTime();
@@ -81,22 +129,13 @@ void digitalClock() {
   oled.setFont(u8g2_font_logisoso16_tf);
   sprintf(tmp,"%02d",second(tt));
   oled.drawStr(100,40,tmp);
-  //sprintf(tmp,"%3s %02d-%3s-%02d", weekDays[weekday(tt)-1], 
-  //   day(tt), monthNames[month(tt)-1], year(tt)-2000);
   sprintf(tmp,"%3s/%02d   %02dC %02d%%", weekDays[weekday(tt)-1], 
        day(tt), round(weather_temp), weather_humidity);
   oled.setFont(u8g2_font_8x13B_mf);
   oled.drawStr(0,10,tmp);
-  //sprintf(tmp,"%2dC %2d%% %4dhPa", 
-  //        round(weather_temp), weather_humidity, weather_pressure); 
   sprintf(tmp,"%s", weather_desc.c_str()); 
   oled.drawStr( (128-oled.getStrWidth(tmp))/2, 62, tmp );
   oled.sendBuffer();
-  // Blink builtin LED once per second except during night hours
-  if (hour(tt)>=7 and hour(tt)<=23) {
-    int state=digitalRead(LED_BUILTIN);
-    digitalWrite(LED_BUILTIN, !state);
-  } else {digitalWrite(LED_BUILTIN, HIGH);}
 }
 
 void setup() {
@@ -125,8 +164,10 @@ void setup() {
   oled.drawStr(30,40,"Ready!");
   oled.sendBuffer();
   getWeather();
-  clockTimer.attach(1,digitalClock); //display digital clock every second
+  blinkTimer.attach(1,blinkLED); 
+  clockTimer.attach(1,[](){showAnalog?analogClock():digitalClock();});
   weatherTimer.attach(3600, [](){getWeatherNow=true;}); 
+  faceTimer.attach(120, [](){ showAnalog=!showAnalog; }); 
 }
 
 void loop() {

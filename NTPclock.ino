@@ -35,7 +35,7 @@ const char* weekDays[7]={"Dom","Lun","Mar","Mie","Jue","Vie","Sab"};
 const char* monthNames[12]={"Ene","Feb","Mar","Abr","May","Jun",
                             "Jul","Ago","Sep","Oct","Nov","Dic"};
 const String CITY_ID="3433955"; //Ciudad Autonoma de Buenos Aires
-const String API_KEY="3755da794b13faa537eb7c8138c45c6d";
+const String API_KEY="";
 float weather_temp=0; //Ambient temperature
 int weather_pressure=0; //Atmospheric pressure
 int weather_humidity=0; //Ambient relative humidity
@@ -83,9 +83,14 @@ void blinkLED() {
 void analogClock() {
   char tmp[16];
   unsigned int xc=31, yc=31, x0, y0, x1, y1;
+  //Get time from NTP client and parse hours, minutes and seconds
   unsigned long tt=timeClient.getEpochTime();
+  int hh=hour(tt);
+  int mm=minute(tt);
+  int ss=second(tt);
   oled.clearBuffer();
   oled.setFont(u8g2_font_8x13B_mf);
+  // Draw clock quadrant
   oled.drawCircle(xc,yc,31);
   oled.drawCircle(xc,yc,30);
   for (float ang=30.0; ang <=330; ang=ang+30.0) {
@@ -94,28 +99,34 @@ void analogClock() {
     oled.drawDisc(x0, y0, 1);
   }
   oled.drawDisc(xc,5,2);
-  int hh=hour(tt);
-  int mm=minute(tt);
-  int ss=second(tt);
+  oled.drawDisc(xc,yc,1);
   if (hh>=12) {hh=hh-12;}
-  float hang=(hh*30.0)+(mm/2.0);
-  float mang=mm*6.0;
+  // Calculate the angle of each hand
+  float hang=(hh*3600+mm*60+ss)/43200.0*360.0;
+  float mang=(mm*60+ss)/3600.0*360.0;
+  Serial.printf("%f %f\n",hang, mang);
   float sang=ss*6.0;
+  // Calculate coords of the point of the hours hand
   x1=round(sin(hang*71/4068.0) * 18 + xc);
   y1=round(-cos(hang*71/4068.0) * 18 + yc);
   oled.drawLine(xc,yc,x1,y1);
-  x1=round(sin(mang*71/4068.0) * 27 + xc);
-  y1=round(-cos(mang*71/4068.0) * 27 + yc);
+  // Calculate coords of the point of the minutes hand
+  x1=round(sin(mang*71/4068.0) * 25 + xc);
+  y1=round(-cos(mang*71/4068.0) * 25 + yc);
   oled.drawLine(xc,yc,x1,y1);
-  oled.setFont(u8g2_font_8x13B_mf);
+  // Calculate coords of the point of the seconds hand
+  x1=round(sin(sang*71/4068.0) * 30 + xc);
+  y1=round(-cos(sang*71/4068.0) * 30 + yc);
+  oled.drawLine(xc,yc,x1,y1);
+  // print weather information
   sprintf(tmp,"%3s %02d", weekDays[weekday(tt)-1], day(tt));
   oled.drawStr(70,10,tmp);
   sprintf(tmp,"%02dC %02d%%", round(weather_temp), weather_humidity);
   oled.drawStr(70,28,tmp);
   sprintf(tmp,"%04dhPa", weather_pressure);
   oled.drawStr(70,43,tmp);
-  sprintf(tmp,"%02d:%02d:%02d", hour(tt),mm,ss);
-  oled.drawStr(64,64,tmp);
+  sprintf(tmp,"%02d:%02d", hour(tt),mm);
+  oled.drawStr(70,64,tmp);
   oled.sendBuffer();
 }
 

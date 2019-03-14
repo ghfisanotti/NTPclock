@@ -1,8 +1,11 @@
 /*
   GHF - 03-mar-19
   
-  Shows an NTP-based digital clock on OLED display
+  Shows a NTP-based digital clock on OLED display
   Connects to WiFi network using WiFiManager library
+  Gets weather information from openweathermap.org
+
+  Hardware:
   MCU: D1 Mini
   Display: OLED 0.96" 128x64 pixel, I2C, SSD1306 controller
 
@@ -35,7 +38,7 @@ const char* weekDays[7]={"Dom","Lun","Mar","Mie","Jue","Vie","Sab"};
 const char* monthNames[12]={"Ene","Feb","Mar","Abr","May","Jun",
                             "Jul","Ago","Sep","Oct","Nov","Dic"};
 const String CITY_ID="3433955"; //Ciudad Autonoma de Buenos Aires
-const String API_KEY="";
+const String API_KEY="xxxx"; //API key for openweathermap.org
 float weather_temp=0; //Ambient temperature
 int weather_pressure=0; //Atmospheric pressure
 int weather_humidity=0; //Ambient relative humidity
@@ -44,6 +47,7 @@ String weather_desc=""; //Weather conditions description
 int weather_id=0; //Weather conditions ID
 bool getWeatherNow=false, showAnalog=true;; 
 
+// Get weather information from openweathermap.org
 void getWeather() {
   DynamicJsonBuffer jsonBuffer;
   HTTPClient http;
@@ -71,8 +75,8 @@ void getWeather() {
   getWeatherNow=false;
 }
 
+// Blink builtin LED once per second except during night hours
 void blinkLED() {
-  // Blink builtin LED once per second except during night hours
   unsigned long tt=timeClient.getEpochTime();
   if (hour(tt)>=7 and hour(tt)<=23) {
     int state=digitalRead(LED_BUILTIN);
@@ -80,6 +84,7 @@ void blinkLED() {
   } else {digitalWrite(LED_BUILTIN, HIGH);}
 }
 
+// Display analog clock face
 void analogClock() {
   char tmp[16];
   unsigned int xc=31, yc=31, x0, y0, x1, y1;
@@ -88,8 +93,8 @@ void analogClock() {
   int hh=hour(tt);
   int mm=minute(tt);
   int ss=second(tt);
+  if (hh>=12) {hh=hh-12;}
   oled.clearBuffer();
-  oled.setFont(u8g2_font_8x13B_mf);
   // Draw clock quadrant
   oled.drawCircle(xc,yc,31);
   oled.drawCircle(xc,yc,30);
@@ -99,12 +104,16 @@ void analogClock() {
     oled.drawDisc(x0, y0, 1);
   }
   oled.drawDisc(xc,5,2);
-  oled.drawDisc(xc,yc,1);
-  if (hh>=12) {hh=hh-12;}
+  oled.drawDisc(xc,yc,2);
+  // Print day and day of the week on the clock face
+  oled.setFont(u8g2_font_profont10_mf);
+  sprintf(tmp,"%3s", weekDays[weekday(tt)-1]);
+  oled.drawStr(9,yc+3,tmp);
+  sprintf(tmp,"%02d", day(tt));
+  oled.drawStr(41,yc+3,tmp);
   // Calculate the angle of each hand
   float hang=(hh*3600+mm*60+ss)/43200.0*360.0;
   float mang=(mm*60+ss)/3600.0*360.0;
-  Serial.printf("%f %f\n",hang, mang);
   float sang=ss*6.0;
   // Calculate coords of the point of the hours hand
   x1=round(sin(hang*71/4068.0) * 18 + xc);
@@ -115,21 +124,20 @@ void analogClock() {
   y1=round(-cos(mang*71/4068.0) * 25 + yc);
   oled.drawLine(xc,yc,x1,y1);
   // Calculate coords of the point of the seconds hand
-  x1=round(sin(sang*71/4068.0) * 30 + xc);
-  y1=round(-cos(sang*71/4068.0) * 30 + yc);
-  oled.drawLine(xc,yc,x1,y1);
-  // print weather information
-  sprintf(tmp,"%3s %02d", weekDays[weekday(tt)-1], day(tt));
-  oled.drawStr(70,10,tmp);
-  sprintf(tmp,"%02dC %02d%%", round(weather_temp), weather_humidity);
-  oled.drawStr(70,28,tmp);
-  sprintf(tmp,"%04dhPa", weather_pressure);
-  oled.drawStr(70,43,tmp);
-  sprintf(tmp,"%02d:%02d", hour(tt),mm);
+  oled.drawCircle(xc,yc+15,8);
+  x1=round(sin(sang*71/4068.0) * 6 + xc);
+  y1=round(-cos(sang*71/4068.0) * 6 + yc+15);
+  oled.drawLine(xc,yc+15,x1,y1);
+  // print weather information on the right of the watch
+  oled.setFont(u8g2_font_inb19_mf);
+  sprintf(tmp,"%02dC", round(weather_temp));
+  oled.drawStr(70,19,tmp);
+  sprintf(tmp,"%02d%%", weather_humidity);
   oled.drawStr(70,64,tmp);
   oled.sendBuffer();
 }
 
+// Display digital clock face
 void digitalClock() {
   char tmp[16];
   unsigned long tt=timeClient.getEpochTime();
@@ -172,9 +180,14 @@ void setup() {
   oled.sendBuffer();
   while (!timeClient.forceUpdate()) { delay(1000); }
   oled.clearBuffer();
-  oled.drawStr(30,40,"Ready!");
+  oled.drawStr(10,28,"NTP syncd!");
+  oled.drawStr(1,48,"Get weather");
   oled.sendBuffer();
   getWeather();
+  oled.clearBuffer();
+  oled.drawStr(30,40,"Ready!");
+  oled.sendBuffer();
+  // Declare time-based functions
   blinkTimer.attach(1,blinkLED); 
   clockTimer.attach(1,[](){showAnalog?analogClock():digitalClock();});
   weatherTimer.attach(3600, [](){getWeatherNow=true;}); 
